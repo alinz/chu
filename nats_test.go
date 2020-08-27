@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/nats-io/nats-streaming-server/server"
@@ -56,21 +57,25 @@ func TestNats(t *testing.T) {
 		return
 	}
 
+	var wg sync.WaitGroup
+	var msg *chu.Message
+
+	wg.Add(1)
+
 	consumer, err := broker.Consumer(&chu.NatsConsumerConfig{
 		Topic: testTopic,
+	}, func(m *chu.Message) {
+		defer wg.Done()
+		msg = m
 	})
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
-	defer consumer.Close(context.Background())
+	defer consumer.Close()
 
-	msg, err := consumer.Consume(context.Background())
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	wg.Wait()
 
 	if !bytes.Equal(data, msg.Value) {
 		t.Error("data is not correct")

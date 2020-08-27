@@ -10,31 +10,6 @@ import (
 	"github.com/nats-io/stan.go"
 )
 
-type NatsConsumer struct {
-	messages chan *Message
-	sub      stan.Subscription
-}
-
-var _ Consumer = (*NatsConsumer)(nil)
-var _ Closer = (*NatsConsumer)(nil)
-
-func (nc *NatsConsumer) Consume(ctx context.Context) (*Message, error) {
-	select {
-	case <-ctx.Done():
-		return nil, context.Canceled
-	case message := <-nc.messages:
-		return message, nil
-	}
-}
-
-func (nc *NatsConsumer) Close(ctx context.Context) error {
-	err := nc.sub.Close()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 type NatsProducer struct {
 	topic string
 	conn  stan.Conn
@@ -94,7 +69,7 @@ type NatsConsumerConfig struct {
 	Durable bool
 }
 
-func (n *Nats) Consumer(config *NatsConsumerConfig) (*NatsConsumer, error) {
+func (n *Nats) Consumer(config *NatsConsumerConfig, consumer Consumer) (Closer, error) {
 	var err error
 
 	options := []stan.SubscriptionOption{
@@ -107,7 +82,6 @@ func (n *Nats) Consumer(config *NatsConsumerConfig) (*NatsConsumer, error) {
 	}
 
 	isGroupHandler := config.Group != ""
-	messages := make(chan *Message, 1)
 
 	prevID := ""
 
@@ -130,7 +104,7 @@ func (n *Nats) Consumer(config *NatsConsumerConfig) (*NatsConsumer, error) {
 		prevID = message.ID
 
 		message.Ack = msg.Ack
-		messages <- message
+		consumer(message)
 	}
 
 	var sub stan.Subscription
@@ -141,14 +115,7 @@ func (n *Nats) Consumer(config *NatsConsumerConfig) (*NatsConsumer, error) {
 		sub, err = n.conn.Subscribe(config.Topic, handler, options...)
 	}
 
-	if err != nil {
-		return nil, err
-	}
-
-	return &NatsConsumer{
-		messages: messages,
-		sub:      sub,
-	}, err
+	return sub, err
 }
 
 func (n *Nats) Open(ctx context.Context) error {

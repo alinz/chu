@@ -5,12 +5,10 @@ import (
 )
 
 type Closer interface {
-	Close(ctx context.Context) error
+	Close() error
 }
 
-type Consumer interface {
-	Consume(ctx context.Context) (*Message, error)
-}
+type Consumer func(*Message)
 
 type ProduceOptions struct {
 	AggregateID string
